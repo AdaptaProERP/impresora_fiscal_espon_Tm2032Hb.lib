@@ -1,0 +1,148 @@
+// Programa   : EPSONDLLPRINT
+// Fecha/Hora : 06/03/2012 02:55:44
+// Propósito  : Imprimir Contenido de la Impresora Epson
+// Creado Por : Juan Navas
+// Llamado por: FMTRUN
+// Aplicación :
+// Tabla      :
+
+#INCLUDE "DPXBASE.CH"
+
+PROCE MAIN(cFile,cCom,nBaudios)
+   LOCAL lRun    :=.F.,aData,cMemo:="",nAt:=0,nPort:=0,nContar:=0
+   LOCAL nFactura:=0
+
+   DEFAULT cFile    :="epsondll.txt",;
+           cCom    :="COM3:",;
+           nBaudios:=9600
+
+
+? cCom,"com, aqui debe Imprimir,EPSONDLLPRINT  "
+
+   IF !FILE(cFile)
+      MensajeErr("Archivo "+cFile+" no Existe")
+      RETURN 0
+   ENDIF
+
+   cMemo:=MemoRead(cFile)
+   cMemo:=STRTRAN(cMemo,CHR(13),"")
+   aData:=_VECTOR(cMemo,CHR(10))
+
+   AEVAL(aData,{|a,n| aData[n]:=ALLTRIM(a) })
+
+   WHILE .T.
+
+     nAt:=ASCAN(aData,{|a,n| Empty(a) })
+
+     IF nAt>0
+        aData:=ARREDUCE(aData,nAt)
+     ELSE
+        EXIT
+     ENDIF
+
+   ENDDO
+
+   AEVAL(aData,{|a,n| aData[n]:="@"+a })
+
+   IF lRun
+      cCom  :=STRTRAN(cCom  ,":","")  // Remueve los dos Puntos :
+      nPort = IF_OPEN(cCom,nBaudios)
+
+      IF nPort < 0  .AND. .F.    
+        MensajeErr("Error en la apertura del puerto de comunicaciones"+cCom)
+        RETURN .F.
+      ENDIF
+
+   ENDIF
+
+   WHILE nContar<=LEN(aData)
+
+      nContar++
+      nErr = IF_WRITE(aData[nContar])
+
+      IF nErr<>0
+         EXIT
+      ENDIF
+   ENDDO
+
+   IF nErr <> 0
+     ReportarError()
+   ELSE
+     // Recuperar el numero de ticket de la respuesta fiscal 
+     nFactura = VAL( IF_READ(3)) 
+   ENDIF
+
+RETURN nFactura
+
+PROCE ReportarError()
+
+ LOCAL nI := 0
+ LOCAL cMsg := ""
+
+ LOCAL aPRNStat:=ARRAY(16)
+ LOCAL aFISStat:=ARRAY(16)
+
+
+ aPRNStat[01] = "Bit  1 " + "Impresora Ocupada"
+ aPRNStat[02] = "Bit  2 " + "Impresora Seleccionada"
+ aPRNStat[03] = "Bit  3 " + "Error en la Impresora"
+ aPRNStat[04] = "Bit  4 " + "Impresora Fuera de L¡nea"
+ aPRNStat[05] = "Bit  5 " + "Poco papel auditor¡a"
+ aPRNStat[06] = "Bit  6 " + "Poco papel"
+ aPRNStat[07] = "Bit  7 " + "Buffer impresora lleno"
+ aPRNStat[08] = "Bit  8 " + "Buffer impresora vacio"
+ aPRNStat[09] = "Bit  9 " + "Sin uso"
+ aPRNStat[10] = "Bit 10 " + "Sin uso"
+ aPRNStat[11] = "Bit 11 " + "Sin uso"
+ aPRNStat[12] = "Bit 12 " + "Sin uso"
+ aPRNStat[13] = "Bit 13 " + "Caj¢n de Dinero Abierto"
+ aPRNStat[14] = "Bit 14 " + "Sin uso"
+ aPRNStat[15] = "Bit 15 " + "Impresora sin Papel"
+ aPRNStat[16] = "Bit 16 " + "Bits 0-6 Activados"
+
+ **  Estados FISCALES (EPSON!!!)
+
+ aFISStat[01] =  "Bit  1 " + "Checkeo de Memoria Fiscal !MAL!"
+ aFISStat[02] =  "Bit  2 " + "Checkeo RAM de Trabajo !MAL!"
+ aFISStat[03] =  "Bit  3 " + "Bater¡a BAJA "
+ aFISStat[04] =  "Bit  4 " + "Comando NO Reconocido "
+ aFISStat[05] =  "Bit  5 " + "Campo de Datos INVALIDO "
+ aFISStat[06] =  "Bit  6 " + "Comando Inv lido para el Estado L¢gico del Equipo"
+ aFISStat[07] =  "Bit  7 " + "Se va a producir el OVERFLOW en los Acumuladores del equipo"
+ aFISStat[08] =  "Bit  8 " + "La memoria Fiscal esta LLENA "
+ aFISStat[09] =  "Bit  9 " + "La memoria fiscal se esta por LLENAR"
+ aFISStat[10] =  "Bit 10 " + "El Impresor tiene N£mero de Serie(Certificado)"
+ aFISStat[11] =  "Bit 11 " + "El controlador Fiscal esta Fiscalizado"
+ aFISStat[12] =  "Bit 12 " + "Se llego al M ximo de Items o se requiere un cierre del d¡a"
+ aFISStat[13] =  "Bit 13 " + "Documento Fiscal Abierto"
+ aFISStat[14] =  "Bit 14 " + "Documento Abierto "
+ aFISStat[15] =  "Bit 15 " + "Factura abierta, Hoja Suelta"
+ aFISStat[16] =  "Bit 16 " + "OR de bits 0-8 da 1 "
+
+ ? "Estado de la impresora:" + CHR(13) + CHR(10)
+
+ FOR nI = 1 TO 16
+    IF IF_ERROR1(nI) > 0
+      cMsg = cMsg + aPRNStat[nI] + CHR(13)+CHR(10)
+    ENDIF
+ NEXT
+
+ ? cMsg
+
+ cMsg = ""
+
+ ? "Estado del controlador fiscal:"  + CHR(13) + CHR(10)
+
+ FOR nI = 1 TO 16
+    IF IF_ERROR2(nI) > 0
+      cMsg = cMsg + aFISStat[nI] + CHR(13)+CHR(10)
+    ENDIF
+ NEXT
+
+ ? cMsg
+ MsgAlert("Presion Enter")
+
+RETURN
+
+
+

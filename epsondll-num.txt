@@ -1,0 +1,96 @@
+// 'name': 'epsondll-num'
+// 'description': 'Obtener Ultimo Numero de Documenton para EPSONDLL'
+// 'category': 'Ventas'
+// 'depends': ['EPSONDLL-PRE','EPSONDLL-LOAD']
+// 'data': ['DPDOCCLI']
+// 'version': '1.2.1'
+
+#INCLUDE "DPXBASE.CH"
+
+FUNC MAIN(cTipDoc,lLoad,lMsg)
+  LOCAL nFactura:=0,nPort:=0,oData
+
+    DEFAULT cTipDoc:="FAV",;
+            lMsg   :=.T.
+
+//  JN, Cambia el Com
+//  IF !EJECUTAR("ISCOMINMODE",oDp:cImpFisCom,lMsg)
+//    RETURN .F.
+//  ENDIF
+
+    nPort = PORTCOM() //Verifica y Activa la Comunicacion con el COM1
+
+    IF !ValType(nPort)="N"
+       RETURN SPACE(10)
+    ENDIF
+
+    IF nPort < 0
+
+        IF lMsg
+
+          MsgMemo("Error de Comunicacion con el Puerto Serial: "+oDp:cImpFisCom, "La Aplicacion NO se Ejecutara")
+
+        ENDIF
+
+        RETURN .F.
+    ENDIF
+
+    IF cTipDoc="FAV"
+      nFactura = IF_WRITE("@StatusRequest|N")
+//? nFactura
+      nFactura = VAL( IF_READ(10))
+//? nFactura
+      nFactura = nFactura+1
+//? nFactura
+      nFactura = STRZERO(nFactura,10)
+//? nFactura
+    ENDIF
+
+    IF cTipDoc="DEV" .OR. cTipDoc="CRE"
+      nFactura = IF_WRITE("@StatusRequest|T")
+      nFactura = VAL( IF_READ(8))
+      nFactura = nFactura+1
+      nFactura = STRZERO(nFactura,10)
+    ENDIF
+
+    IF lMsg
+
+      oData:=DATASET("SUC_V"+oDp:cSucursal,"ALL")
+      // oData:Set(cTipDoc+"Numero",nFactura) // 02/11/2020 , la factura fiscal y electrónica seran diferentes, en el caso de reseteo de la memoria fiscal podra continuar
+      oData:Set(cTipDoc+"NumFis",nFactura)
+      oData:Save(.T.)
+      oData:End()
+
+    ENDIF
+
+RETURN nFactura
+
+//Abrir el puerto COMX con IF_OPEN
+FUNCTION PORTCOM()
+  LOCAL nPort:=0, nEstado:=0
+  LOCAL lOk  :=EJECUTAR("ISCOMINMODE",oDp:cImpFisCom,.F.,.F.)
+
+  nPort   = IF_OPEN(oDp:cImpFisCom,9600 )
+//? nPort,"IF_OPEN"
+  nEstado = IF_WRITE("@StatusRequest|A")
+//? nEstado,"@StatusRequest|A"
+  nEstado = IF_READ(1)
+//? nEstado,"IF_READ(1)"
+
+  IF nEstado = "FFFF"
+
+   IF lMsg
+
+     MsgMemo("Verifique que este Conectada y Encendida"+CRLF+"Puerto "+oDp:cImpFisCom+IF(lOk,"Si","No")+" está Activo","No hay Conexion con la Impresora en Puerto "+oDp:cImpFisCom)
+     DPSETTIMER(NIL,"IMPCHK",0)  
+
+   ENDIF
+
+   RETURN 0
+
+  ENDIF
+
+  IF_SERIAL("27-0163848-435")
+
+RETURN (nPort)
+//EOF

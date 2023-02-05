@@ -1,0 +1,300 @@
+// 'name': 'epsondll-mnu'
+// 'description': 'Menu Impresora Fiscal EPSONDLL'
+// 'category': 'Ventas'
+// 'depends': ['APLVTA']
+// 'data': ['DPDOCCLI']
+// 'version': '1.2.1'
+
+#INCLUDE "DPXBASE.CH"
+
+FUNC MAIN()
+  LOCAL oBtn,oFontB,nAlto:=22,nAncho:=100,aBtn:={},I,nLin:=0,nHeight,nPort
+  LOCAL cTitle:="Opciones Impresora Fiscal Epson"
+
+   //? EJECUTAR("ISCOMINMODE",oDp:cImpFisCom),oDp:cImpFisCom
+
+  IF !EJECUTAR("ISCOMINMODE",oDp:cImpFisCom)
+    // RETURN .F.
+  ENDIF
+
+   nPort = PORTCOM() //Verifica y Activa la Comunicacion
+    
+    IF nPort < 0
+        MsgMemo("No hay Comunicacion Con El"+CHR(13)+CHR(10)+; 
+                "Puerto Serial: "+oDp:cImpFisCom, "Las opciones no estarán disponibles")
+        RETURN .F.
+     ENDIF
+
+    cTitle:=" Menu Epson PF300 II "
+
+    SysRefresh(.T.)
+
+    AADD(aBtn,{"Reporte Z"        ,"EpsonRepZ.BMP"  ,"Reporte_Z"   })
+    AADD(aBtn,{"Reporte X"        ,"EpsonRepX.BMP"  ,"Reporte_X"   })
+    AADD(aBtn,{"Abrir  CF"        ,"EpsonAbrir.BMP" ,"Abrir_CF"    })
+    AADD(aBtn,{"Cerrar CF"        ,"EpsonCerrar.BMP","Cerrar_CF"   })
+    AADD(aBtn,{"Borrar Factura"   ,"EpsonCancel.BMP","Cancelar_FAV"})
+    AADD(aBtn,{"Borrar Devolucion","EpsonCancel.BMP","Cancelar_DEV"})
+    AADD(aBtn,{"Test Epson"       ,"EpsonTest.BMP"  ,"Test_NF"     })
+    AADD(aBtn,{"Consultar Estado" ,"EpsonConsul.BMP","Estado"      })
+
+
+    DEFINE FONT oFontB  NAME "MS Sans Serif" SIZE 0, -10 BOLD
+
+    oMenuImp:=DPEDIT():New(cTitle,NIL,"oMenuImp",.F.)
+    oMenuImp:lMsgBar:=.F.
+    oMenuImp:aBtn   :=ACLONE(aBtn)
+    oMenuImp:nCrlPane:=16772810
+
+    nHeight:=370
+    nHeight:=35+((Len(aBtn)+0)*(nAlto*2))
+    oMenuImp:CreateWindow(nil,70,1,nHeight,(nAncho*2)+12)
+    oMenuImp:oDlg:SetColor(NIL,oMenuImp:nCrlPane)
+
+    nLin   :=nAlto-nAlto
+
+    FOR I=1 TO LEN(aBtn)
+      @nLin, 01 SBUTTON oBtn OF oMenuImp:oDlg;
+                SIZE nAncho,nAlto-1.5;
+                FONT oFontB;
+                FILE "BITMAPS\"+aBtn[I,2] ;
+                PROMPT PADR(aBtn[I,1],20);
+                NOBORDER;
+                ACTION 1=1;
+                PIXEL;
+                COLORS CLR_BLUE, {CLR_WHITE, oMenuImp:nCrlPane, 1 }
+
+      oBtn:bAction:=BloqueCod("oMenuImp:DOCPRORUN(["+aBtn[I,3]+"])")
+      nLin:=nLin+nAlto
+    NEXT I
+
+    oMenuImp:Activate({||DOCPROMNUINI()})
+
+RETURN .T.
+
+//Abrir el puerto COMX con IF_OPEN
+FUNCTION PORTCOM()
+  LOCAL nPort:=0, nEstado:=0
+
+    nPort   = IF_OPEN(oDp:cImpFisCom,9600 )
+    nEstado = IF_WRITE("@StatusRequest|N")
+    nEstado = IF_READ(1)
+
+    IF nEstado = "FFFF"
+      MsgAlert("Error de Conexion con la Impresora "+oDp:cImpFisCom+CHR(13)+CHR(10)+; 
+               "Verifique que este Conectada y Encendida", "La Aplicacion NO se Cerrara")
+      RETURN nPort
+    ENDIF
+
+    IF_SERIAL("27-0163848-435")
+
+RETURN (nPort)
+
+FUNCTION DOCPROMNUINI()
+    oBtn:=oMenuImp:oDlg:aControls[1]
+    oMenuImp:oWnd:Move(0,0)
+    DPFOCUS(oBtn)
+
+    SysRefresh(.T.)
+
+RETURN .T.
+
+//Opciones de Ejecucion para la Impresora Epson con el DLL
+FUNCTION DOCPRORUN(cAction)
+  LOCAL cError:="",nRet,uBuf,cAlicuota:=""
+  LOCAL cAlicuota:=""
+  LOCAL ancho:=IIF(AT(" ",oDp:cImpFiscal)>0,AT(" ",oDp:cImpFiscal)-1,LEN(oDp:cImpFiscal))
+  LOCAL nEstado:=0,nErr:=0
+
+  LOCAL nErr:=0,nI1:=0,aPRNStat1:=ARRAY(14),nI2:=0,aPRNStat2:=ARRAY(14),cMsg:="",StrBuff
+
+    IF cAction="Reporte_Z"
+
+      IF  MsgYesNo("Esta Seguro que desea Emitir el Reporte Z ?","Emision Reporte Z")
+        IF_WRITE("@DailyClose|Z")
+        Auditoria(cAction)
+        SQLUPDATE("DPDOCCLI","DOC_IMPRES",.T.,"DOC_TIPDOC='FAV' OR DOC_TIPDOC='DEV' OR DOC_TIPDOC='CRE'") //Emitir El Reporte Z, Registra Todas los Documentos Impresos
+      ENDIF
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Reporte_X"
+      IF_WRITE("@DailyClose|X")
+      Auditoria(cAction)
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Abrir_CF"
+      IF MSgYesNo("Esta accion dara apertura a un Comprobante Fiscal, Desea Continuar?","Apertura Comprobante Fiscal")
+        IF_WRITE("@OpenFiscalReceipt")
+        Auditoria(cAction)
+      ENDIF
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Cerrar_CF"
+      IF MSgYesNo("Esta accion dara cierre a un Comprobante Fiscal, Desea Continuar?","Cierre Comprobante Fiscal")
+        IF_WRITE("@CloseFiscalReceipt")
+        Auditoria(cAction)
+      ENDIF
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Cancelar_FAV"
+      EJECUTAR("EPSONDLL-DEL","FAV") //Elimina de los registros de la base de datos el ultimo documento no impreso
+      Auditoria(cAction)
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Cancelar_DEV"
+      EJECUTAR("EPSONDLL-DEL","DEV") //Elimina de los registros de la base de datos el ultimo documento no impreso
+      Auditoria(cAction)
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Test_NF"
+      IF MSgYesNo("Se imprimira un documento NO FISCAL,Desea Continuar?","Prueba de Conexion Epson")
+        IF_WRITE("@OpenNonfiscalReceipt")
+        IF_WRITE("@PrintNonfiscalText|Prueba de Conexion - Exitosa")
+        IF_WRITE("@PrintNonfiscalText|Si puede leer este documento su impresora")
+        IF_WRITE("@PrintNonfiscalText|esta correctamente configurada...")
+        IF_WRITE("@CloseNonfiscalReceipt")
+        Auditoria(cAction)
+      ENDIF
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    IF cAction="Estado"
+      strBuff = "@StatusRequest" + "|" + "N"
+      nErr = IF_WRITE(strBuff)
+
+      IF nErr <> 0
+        ReportarError()
+      ENDIF
+
+      aPRNStat2[01] = "Estado impresora"+SPACE(03)+IF_READ(1)
+      aPRNStat2[02] = "Estado fiscal"+SPACE(11)+IF_READ(2)+CHR(10)
+
+      aPRNStat2[03] = "Ultimo valor de secuencia"+SPACE(30)+IF_READ(3)
+      aPRNStat2[04] = "Codigo del estado actual de la impresora"+SPACE(03)+IF_READ(4)
+      aPRNStat2[05] = "Codigo ultimo comando ejecutado"+SPACE(14)+IF_READ(5)+CHR(10)
+
+      aPRNStat2[06] = "Fecha en la Impresora Fiscal"+SPACE(03)+IF_READ(6)
+      aPRNStat2[07] = "Hora en la Impresora Fiscal"+SPACE(04)+IF_READ(7)+CHR(10)
+
+      aPRNStat2[08] = "Facturas fiscales emitidas en el periodo"+SPACE(16)+IF_READ(8)
+      aPRNStat2[09] = "Documentos no fiscales emitidos en el periodo"+SPACE(03)+IF_READ(9)+CHR(10)
+
+      aPRNStat2[10] = "Facturas fiscales acumuladas"+SPACE(17)+IF_READ(10)
+      aPRNStat2[11] = "Documentos no fiscales acumulados"+SPACE(3)+IF_READ(11)+CHR(10)
+      aPRNStat2[12] = "# del ultimo reporte Z efectuado"+SPACE(10)+IF_READ(12)+CHR(10)
+
+      FOR nI2 = 1 TO 12
+        cMsg = cMsg + aPRNStat2[nI2] + CHR(13) + CHR(10)
+      NEXT
+
+      MsgInfo(cMsg,"Impresora EPSON DLL")
+
+      SysRefresh(.T.)
+
+      RETURN .T.
+    ENDIF
+
+    cError:=BEMA_INI()
+
+    IF !Empty(cError)
+      MensajeErr(cError)
+      RETURN .F.
+    ENDIF
+
+
+RETURN .T.
+
+// Para Registrar Auditorias Opciones 
+FUNCTION AUDITORIA(cAction)
+    AUDITAR("PROC" , .F. , "DPPOSUSUARIO" , cAction+" - "+oDp:cImpFiscal )
+RETURN .T.
+
+// Funcion de manejo de errores
+PROCE ReportarError()
+  LOCAL nI:=0,cMsg := ""
+  LOCAL aPRNStat:=ARRAY(16)
+  LOCAL aFISStat:=ARRAY(16)
+
+// Estados de la Impresora
+    aPRNStat[01] = "Bit  1 " + "Impresora Ocupada"
+    aPRNStat[02] = "Bit  2 " + "Impresora Seleccionada"
+    aPRNStat[03] = "Bit  3 " + "Error en la Impresora"
+    aPRNStat[04] = "Bit  4 " + "Impresora Fuera de Línea"
+    aPRNStat[05] = "Bit  5 " + "Poco Papel Auditoria"
+    aPRNStat[06] = "Bit  6 " + "Poco Papel"
+    aPRNStat[07] = "Bit  7 " + "Buffer Impresora LLeno"
+    aPRNStat[08] = "Bit  8 " + "Buffer Impresora Vacio"
+    aPRNStat[09] = "Bit  9 " + "Sin uso"
+    aPRNStat[10] = "Bit 10 " + "Sin uso"
+    aPRNStat[11] = "Bit 11 " + "Sin uso"
+    aPRNStat[12] = "Bit 12 " + "Sin uso"
+    aPRNStat[13] = "Bit 13 " + "Cajón de Dinero Abierto"
+    aPRNStat[14] = "Bit 14 " + "Sin uso"
+    aPRNStat[15] = "Bit 15 " + "Impresora Sin Papel"
+    aPRNStat[16] = "Bit 16 " + "Bits 0-6 Activados"
+
+// Estados de la Memoria Fiscal
+    aFISStat[01] =  "Bit  1 " + "Checkeo de Memoria Fiscal !MAL!"
+    aFISStat[02] =  "Bit  2 " + "Checkeo RAM de Trabajo !MAL!"
+    aFISStat[03] =  "Bit  3 " + "Batería BAJA "
+    aFISStat[04] =  "Bit  4 " + "Comando NO Reconocido "
+    aFISStat[05] =  "Bit  5 " + "Campo de Datos INVALIDO "
+    aFISStat[06] =  "Bit  6 " + "Comando Invalido para el Estado Logico del Equipo"
+    aFISStat[07] =  "Bit  7 " + "Se va a producir el OVERFLOW en los Acumuladores del Equipo"
+    aFISStat[08] =  "Bit  8 " + "La Memoria Fiscal esta LLENA "
+    aFISStat[09] =  "Bit  9 " + "La Memoria Fiscal esta por LLENAR"
+    aFISStat[10] =  "Bit 10 " + "La Impresora tiene Número de Serie(Certificado)"
+    aFISStat[11] =  "Bit 11 " + "El Controlador Fiscal esta Fiscalizado"
+    aFISStat[12] =  "Bit 12 " + "Se llego al Maximo de Items o se Requiere un Cierre del Dia"
+    aFISStat[13] =  "Bit 13 " + "Documento Fiscal Abierto"
+    aFISStat[14] =  "Bit 14 " + "Documento Abierto "
+    aFISStat[15] =  "Bit 15 " + "Factura Abierta, Hoja Suelta"
+    aFISStat[16] =  "Bit 16 " + "OR de bits 0-8 da 1 "
+
+    FOR nI = 1 TO 16
+      IF IF_ERROR1(nI) > 0
+        cMsg = cMsg + aPRNStat[nI] + CHR(13)+CHR(10)
+      ENDIF
+    NEXT
+
+    MensajeErr(cMsg,"Estado de la Impresora")
+
+    cMsg = ""
+
+    FOR nI = 1 TO 16
+      IF IF_ERROR2(nI) > 0
+        cMsg = cMsg + aFISStat[nI] + CHR(13)+CHR(10)
+      ENDIF
+    NEXT
+
+    MensajeErr(cMsg,"Estado del Controlador Fiscal")
+
+RETURN .T.
+//EOF

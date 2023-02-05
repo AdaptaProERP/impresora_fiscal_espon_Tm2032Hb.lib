@@ -1,0 +1,162 @@
+// 'name': 'epsondll-pre'
+// 'description': 'Pregrabar para EPSONDLL'
+// 'category': 'Ventas'
+// 'depends': ['DPFACTURAV']
+// 'data': ['DPDOCCLI']
+// 'version': '1.2.1'
+
+#INCLUDE "DPXBASE.CH"
+
+FUNC MAIN(oDoc,lSave)
+  LOCAL lResp:=.T.,oForm:=oDoc,lFound:=.F.,cNumero:=""
+  LOCAL nItemMax:=0,lLibVta:=.F.,I
+  LOCAL aControls:={}
+  LOCAL cCodSuc,cTipDoc,cCodCli,cNumero,cFisNom,cFisRif,cFisDir
+
+  DEFAULT lSave:=.F.
+
+    oDoc:DOC_USUARI:=oDp:cUsuario
+
+    AADD(aControls,oDoc:oDOC_CODIGO)
+    AADD(aControls,oDoc:oDOC_FECHA )
+    AADD(aControls,oDoc:oDOC_CODVEN)
+    AADD(aControls,oDoc:oDOC_NUMERO)
+
+    //Incluir
+    IF !oDoc:lSaved .AND. oDoc:nOption=1
+      WHILE AllDigit(oDoc:DOC_NUMERO)
+
+        IF oDoc:nEpson<>0 .AND. oDocCli:nPar_CxC<>0
+          cNumero:=EJECUTAR("EPSONDLL-NUM",oDoc:cTipDoc,.F.)
+
+          IF Empty(cNumero)
+            RETURN .F.
+          ENDIF
+
+          oDocCli:oDOC_NUMERO:VarPut(cNumero,.T.)
+          EXIT
+        ENDIF
+
+        lFound:=SQLGET("DPDOCCLI","DOC_NUMERO","DOC_CODSUC"+GetWhere("=",oDoc:DOC_CODSUC)+" AND "+;
+                                  "DOC_TIPDOC"+GetWhere("=",oDoc:DOC_TIPDOC)+" AND "+;
+                                  "DOC_NUMERO"+GetWhere("=",oDoc:DOC_NUMERO)+" AND "+;
+                                  "DOC_TIPTRA='D'")=oDoc:DOC_NUMERO
+
+        IF !lFound
+          EXIT
+        ENDIF
+
+        oDoc:DOC_NUMERO:=SQLINCREMENTAL("DPDOCCLI","DOC_NUMERO","DOC_CODSUC"+GetWhere("=",oDoc:DOC_CODSUC)+" AND "+;
+                                                   "DOC_TIPDOC"+GetWhere("=",oDoc:DOC_TIPDOC)+" AND "+;
+                                                   "DOC_TIPTRA='D'")
+
+        oDoc:oDOC_NUMERO:VarPut(oDoc:DOC_NUMERO,.T.)
+
+      ENDDO
+    ENDIF
+
+    IF lSave .AND. oDoc:nOption=1 .AND. (oDoc:DOC_NETO=0 .OR. oGrid:Count()=0)
+
+      oDoc:oDOC_CODIGO:MsgErr("No se puede Grabar ["+oDoc:cNomDoc+"] sin Monto")
+
+      IF EMPTY(oDoc:DOC_CODIGO)
+        DpFocus(oDoc:oDOC_CODIGO)
+      ENDIF
+
+      RETURN .F.
+    ENDIF
+
+    IF !Empty(oDoc:cCodCli) .AND. oDoc:cCodCli<>oDoc:DOC_CODIGO
+
+      lResp:=EJECUTAR("DPDOCCLICLI",oDoc:DOC_CODSUC,oDoc:DOC_TIPDOC,oDoc:cNumero,oDoc:cCodCli,;
+                                    oDoc:DOC_CODIGO,oDoc:DOC_NUMERO)
+
+      IF lResp
+        oDoc:cCodCli:=""
+      ENDIF
+    ENDIF
+
+    oDoc:DOC_ESTADO:="AC"
+    oDoc:DOC_ACT   :=1 // Activo
+    oDoc:DOC_FCHVEN:=EJECUTAR("CALFCHVEN",oDoc:DOC_FECHA,oDoc:DOC_PLAZO)
+    oDoc:DOC_FCHVEN:=IIF(Empty( oDoc:DOC_FCHVEN ),oDoc:DOC_FECHA , oDoc:DOC_FCHVEN)
+    oDoc:DOC_DOCORG:="V"
+
+    oDoc:nItemMax  :=SQLGET("DPTIPDOCCLI","TDC_NITEMS","TDC_TIPO"+GetWhere("=",oDoc:DOC_TIPDOC))
+
+    IF oDoc:nOption=1 .AND. oDoc:nPar_CxC<>0 .AND. oDoc:lPar_LibVta .AND. lSave .AND. lResp .AND. ;
+      !EJECUTAR("DPDOCNUMFIS",oDoc:DOC_CODSUC,oDoc:DOC_TIPDOC,oDoc:DOC_CODIGO,oDoc:DOC_NUMERO,.T.,oForm)
+      lResp:=.F.
+      oDoc:Prepare()
+    ENDIF
+
+    oDoc:Prepare()
+
+    nItemMax:=SQLGET("DPTIPDOCCLI","TDC_NITEMS","TDC_TIPO"+GetWhere("=",oDoc:DOC_TIPDOC))
+
+    IF lSave .AND. nItemMax>0 .AND. oDoc:nItems>nItemMax
+      MensajeErr("Número de Items "+LSTR(oDoc:nItems)+" de la Factura Excedio el Permitido ("+LSTR(nItemMax)+")","Numero de Items Excedido")
+      RETURN .F.
+    ENDIF
+
+  // Imprimir y Cerrar el Documento
+    IF oDoc:nOption=1 .AND. oDoc:nPar_CxC<>0 .AND. oDoc:lPar_LibVta .AND. lSave .AND. lResp
+      PrintEpson()
+      PrintValid()
+    ENDIF
+
+RETURN lResp
+
+//Orden de Imprimir
+FUNCTION PrintEpson()
+  cCodSuc:=oDoc:DOC_CODSUC
+  cTipDoc:=oDoc:DOC_TIPDOC
+  cCodCli:=oDoc:DOC_CODIGO
+  cNumero:=oDoc:DOC_NUMERO
+
+  cFisNom:=oForm:CCG_NOMBRE
+  cFisRif:=oForm:CCG_RIF
+  cFisDir:=ALLTRIM(oForm:CCG_DIR1)+" "+ALLTRIM(oForm:CCG_DIR2)
+  
+  IF !Empty(oForm:CCG_TEL1)
+    cFisDir:=LEFT(cFisDir,126-LEN(ALLTRIM(oForm:CCG_TEL1)))+" / Tlf:"+ALLTRIM(oForm:CCG_TEL1)
+  ENDIF
+
+  RETURN EJECUTAR ("EPSONDLL-PRINT",cCodSuc,cTipDoc,cCodCli,cNumero,cFisNom,cFisRif,cFisDir,.t.)
+RETURN .T.
+
+//Validar Impresion
+FUNCTION PrintValid()
+  oDocImp:= oDoc:DOC_IMPRES
+
+  IF oDoc:DOC_TIPDOC="FAV"
+    cNumero = IF_WRITE("@StatusRequest|N")
+    cNumero  = VAL( IF_READ(10))
+    cNumero  = STRZERO(cNumero ,10)
+  ENDIF
+
+  IF oDoc:DOC_TIPDOC="DEV" .OR. oDoc:DOC_TIPDOC="CRE"
+    cNumero  = IF_WRITE("@StatusRequest|T")
+    cNumero  = VAL( IF_READ(8))
+    cNumero  = STRZERO(cNumero ,10)
+  ENDIF
+
+  oDoc:oDOC_NUMFIS:VarPut(cNumero,.T.)
+
+/*
+  IF cNumero=oDoc:DOC_NUMERO
+
+    lResp:=.T.
+
+  ELSE
+
+    MensajeErr("El Numero del Documento "+oDoc:DOC_NUMERO+" NO Coincide"+CRLF+;
+               "Con el Numero en la Impresora.     "+cNumero+CRLF+;
+               "Verique el Estado de la Impresora y"+CRLF+;
+               "Grabe de Nuevo el Documento        ","Error de Correlativos")
+    lResp:=.F.
+
+  ENDIF
+*/
+RETURN .T.
+//EOF

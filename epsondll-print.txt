@@ -1,0 +1,233 @@
+// 'name': 'epsondll-print'
+// 'description': 'Imprimir Documento Fiscal en EPSONDLL'
+// 'category': 'Ventas'
+// 'depends': ['EPSONDLL-PRE','DPFACTURAV']
+// 'data': ['DPDOCCLI']
+// 'version': '1.2.1'
+
+#INCLUDE "DPXBASE.CH"
+
+FUNC MAIN(cCodSuc,cTipDoc,cCodCli,cNumero,cFisNom,cFisRif,lUpdate)
+  LOCAL oTable,nTasa:="",nDes:="",cDir1:="",cDir2:="",cVen1:="",cTel1:=""
+  LOCAL cCliente:="",cRif:="",cNumDev:="",cSerial:="EOC0012191",cFecha:="",cHora:="",cTipo:=""
+
+  DEFAULT cCodSuc:=oDp:cSucursal,cTipDoc:="FAV",cCodCli:=STRZERO(1,10),cNumero:=STRZERO(1,10),lUpdate:=.T.
+
+    oTable:=OpenTable(" SELECT DOC_NUMERO,MOV_CODIGO,MOV_ASODOC,DOC_DOCORG,DOC_CODSUC,INV_DESCRI,MOV_TOTAL,DOC_OTROS,DOC_HORA,DOC_DCTO"+;
+                      " DOC_DCTO,MOV_PRECIO,MOV_DESCUE,IF(MSR_SERIAL<>'',1,MOV_CANTID) AS MOV_CANTID,CLI_DIR1,CLI_DIR2,CLI_TEL1,"+;
+                      " MOV_IVA,CCG_NOMBRE,CCG_RIF,CLI_NOMBRE,CLI_RIF,DOC_CODVEN,DOC_IMPRES,DOC_CODIGO,DOC_FACAFE,MSR_SERIAL,MOV_ASODOC"+;
+                      " FROM DPMOVINV INNER JOIN DPINV ON MOV_CODIGO=INV_CODIGO"+;
+                      " LEFT   JOIN DPMOVSERIAL ON MOV_DOCUME=MSR_NUMDOC AND MOV_ITEM=MSR_ITEM AND MOV_TIPDOC=MSR_TIPDOC AND MOV_CODCTA=MSR_CODCTA AND MOV_CODSUC=MSR_CODSUC "+;
+                      " INNER  JOIN DPDOCCLI ON MOV_CODSUC=DOC_CODSUC AND MOV_TIPDOC=DOC_TIPDOC AND DOC_NUMERO=MOV_DOCUME AND DOC_TIPTRA='D' AND MOV_APLORG"+GetWhere("=","V")+;
+                      " LEFT   JOIN DPCLIENTESCERO ON CCG_CODSUC=DOC_CODSUC AND CCG_TIPDOC=DOC_TIPDOC AND CCG_NUMDOC=DOC_NUMERO "+;
+                      " LEFT   JOIN DPCLIENTES     ON CLI_CODIGO=DOC_CODIGO "+;
+                      " WHERE MOV_CODSUC"+GetWhere("=",cCodSuc)+;
+                      "   AND MOV_TIPDOC"+GetWhere("=",cTipDoc)+;
+                      "   AND MOV_DOCUME"+GetWhere("=",cNumero),.T.)
+
+    oTable:GoTop()
+//  oTable:Browse()
+// +;
+//                      " AND   MOV_CODCTA"+GetWhere("=",cCodCli)+;
+//                      " AND   ,.T.)
+//
+//   " AND   MOV_USUARI"+GetWhere("=",oDp:cUsuario)+;
+// ? CLPCOPY(oDp:cSql)
+//oTable:Browse()
+
+// Inicializar los campos a imprimir
+
+    IF cCodCli <> "0000000000"
+      cCliente :=ALLTRIM(PADR(oTable:CLI_NOMBRE,38))
+      cRif     :=ALLTRIM(PADR(oTable:CLI_RIF,12))
+    ELSE
+      cCliente :=ALLTRIM(PADR(cFisNom,38))
+      cRif     :=ALLTRIM(PADR(cFisRif,12))
+    ENDIF
+
+    IF cTipDoc="FAV"
+      cTipo:= "T"
+    ELSE
+      cTipo:= "D"
+      cNumDev:=oTable:MOV_ASODOC
+      cHora  :=oTable:DOC_HORA
+      ? "N/C Sobre Factura Afectada Nro:",cNumDev
+    ENDIF
+
+    cDir1:=ALLTRIM(PADR(oTable:CLI_DIR1,30))
+    cDir2:=ALLTRIM(PADR(oTable:CLI_DIR2,30))
+    cVen1:=ALLTRIM(PADR(oTable:DOC_CODVEN,10))
+    cTel1:=ALLTRIM(PADR(oTable:CLI_TEL1,14))
+    nDes :=oTable:DOC_DCTO
+
+// Validar si se obtiene informacion
+
+    IF oTable:RecCount()=0
+      Alert("No se Encontró información "+cTipDoc+" "+cNumero)
+      oTable:End()
+      RETURN
+    ENDIF
+
+*** Validar impresion realizada
+
+    IF oTable:DOC_IMPRES
+      MensajeErr("Factura: "+oTable:DOC_NUMERO+" ya se Imprimió")
+      oTable:End()
+      RETURN.F.
+    ENDIF
+
+    AbrirFiscal()
+    ItemsFiscal()
+    DescuentoFiscal()
+    //SubtotalFiscal()
+    PreCerrarFiscal()
+    TextoFiscal1()
+    TextoFiscal2()
+    CerrarFiscal()
+
+    //SQLUPDATE("DPDOCCLI","DOC_IMPRES",.T.,"DOC_TIPDOC='FAV' OR DOC_TIPDOC='DEV'")
+
+RETURN .T.
+
+
+FUNCTION AbrirFiscal()
+****************************
+  LOCAL Var1:=cCliente
+  LOCAL Var2:=cRif
+  LOCAL Var3:=cNumDev
+  LOCAL Var4:=cSerial
+  LOCAL Var5:=cFecha
+  LOCAL Var6:=cHora
+  LOCAL Var7:=cTipo
+  LOCAL Var8:=""
+  LOCAL Var9:=""
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    strBuff= "@OpenFiscalReceipt" + "|" + TRIM(Var1) + "|" + TRIM(Var2) + "|" + ;
+              TRIM(Var3) + "|" + TRIM(Var4) + "|" + TRIM(Var5) + "|" + ;
+              TRIM(Var6) + "|" + Var7 + "|" + Var8 + "|" + Var9
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"Abrir()"
+RETURN (nEpson)
+
+FUNCTION TextoFiscal1()
+***************************
+  LOCAL Var1:=ALLTRIM(PADR((cDir1+cDir2),48))
+  LOCAL Var2:="S"
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    strBuff= "@PrintFiscalText" + "|" + TRIM(Var1) + "|" + Var2
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"Texto1()"
+RETURN (nEpson)
+
+FUNCTION TextoFiscal2()
+***************************
+  LOCAL Var1:=ALLTRIM(PADR(("Ven:"+cVen1+" Telf:"+cTel1),48))
+  LOCAL Var2 :="S"
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    strBuff= "@PrintFiscalText" + "|" + TRIM(Var1) + "|" + Var2
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"Texto2()"
+RETURN (nEpson)
+
+FUNCTION ItemsFiscal()
+************************
+  LOCAL Var1:=""
+  LOCAL Var2:=0
+  LOCAL Var3:=0
+  LOCAL Var4:=0
+  LOCAL Var5:="M"
+  LOCAL Var6:=""
+  LOCAL Var7:=""
+  LOCAL Var8:=""
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    WHILE !oTable:Eof()
+
+      Var1    :=ALLTRIM(PADR(oTable:INV_DESCRI,38))
+      Var2    :=oTable:MOV_CANTID
+      Var3    :=oTable:MOV_PRECIO
+      Var4    :=IIF(oTable:MOV_IVA<>0,nTasa:=oTable:MOV_IVA/100,nTasa:=0)
+
+      strBuff= "@PrintLineItem" + "|" + TRIM(Var1) + "|" + LTRIM(STR(Var2,9,3)) + "|" + ;
+                LTRIM(STR(Var3,12,2)) + "|" + LTRIM(STR(Var4,7,4)) + "|" + ;
+                Var5 + "|" + Var6 + "|" + Var7 + "|" + Var8
+      nEpson = IF_WRITE(strBuff)
+
+      oTable:DbSkip()
+    ENDDO
+
+    //? strBuff,"Items()"
+RETURN (nEpson)
+
+FUNCTION DescuentoFiscal()
+*************************
+  LOCAL Var1:=(LTRIM(STR(nDes,5,2))+"% Descuento")
+  LOCAL Var2:=nDes
+  LOCAL Var3:="D"
+  LOCAL Var4:="0.0"
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    IF nDes<>0
+      strBuff= "@ReturnRecharge" + "|" + TRIM(Var1) + "|" + LTRIM(STR(Var2,5,2)) + "|" + TRIM(Var3) + "|" + TRIM(Var4)
+      nEpson = IF_WRITE(strBuff)
+    ENDIF
+
+    //? strBuff,"Descuento()"
+RETURN (nEpson)
+
+FUNCTION SubTotalFiscal()
+*******************
+  LOCAL Var1:=""
+  LOCAL Var2:=""
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    //strBuff= "@Subtotal"
+    strBuff= "@Subtotal" + "|" + Var1 + "|" + Var2
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"SubTotal()"
+RETURN (nEpson)
+
+FUNCTION PreCerrarFiscal()
+********************************
+  LOCAL Var1:="A"
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    strBuff= "@CloseFiscalReceipt" + "|" + Var1
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"PreCerrar()"
+RETURN (nEpson)
+
+FUNCTION CerrarFiscal()
+*****************************
+  LOCAL Var1:="T"
+
+    PRIVATE nEpson
+    PRIVATE strBuff
+
+    strBuff= "@CloseFiscalReceipt" + "|" + Var1
+    nEpson = IF_WRITE(strBuff)
+
+    //? strBuff,"Cerrar()"
+RETURN (nEpson)

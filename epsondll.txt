@@ -1,0 +1,274 @@
+// Programa   : EPSONDLL
+// Fecha/Hora : 23/02/2012 23:20:04
+// Propósito  : Ejecutar Dll de EPSON
+// Creado Por : Juan Navas , Agradecimientos a César Romero
+// Llamado por:
+// Aplicación :
+// Tabla      :
+
+#INCLUDE "DPXBASE.CH"
+
+PROCE MAIN()
+ LOCAL nPort:=0,nOption:=0
+ LOCAL oDlg
+
+ * Abrir el puerto COM1 con IF_OPEN
+ * SI la impresora esta en el COM2 cambiar COM1 a COM2
+
+ nPort = IF_OPEN("COM1",9600 )
+
+//? nPort,"nPort"
+
+ *Error en la apertura del puerto de comunacionaciones
+ 
+ IF nPort < 0  //.AND. .F.    
+  ? "Error en la apertura del puerto de comunicaciones" + CHR(13) + CHR(10)
+  RETURN
+ ENDIF
+
+ DEFINE DIALOG oDlg TITLE "TEST EPSON" SIZE 270,220
+
+ @ 1,1 BUTTON '1. Imprimir CierreZ'             SIZE 120,15 ACTION (nOption:=1,RUNEPSON(nOption))
+ @ 2,1 BUTTON '2. Imprimir Ticket-Factura'      SIZE 120,15 ACTION (nOption:=2,RUNEPSON(nOption))
+ @ 3,1 BUTTON '3. Imprimir Documento No Fiscal' SIZE 120,15 ACTION (nOption:=3,RUNEPSON(nOption))
+ @ 4,1 BUTTON '4. Salir'                        SIZE 120,15 ACTION (nOption:=4,oDlg:End())
+ 
+
+
+/* Antes
+ @ 1,1 BUTTON '1. Imprimir 333CierreZ'             SIZE 120,15 ACTION (nOption:=1,RUNEPSON(nOption))
+ @ 2,1 BUTTON '2. Imprimir Ticket'              SIZE 120,15 ACTION (nOption:=2,RUNEPSON(nOption))
+ @ 3,1 BUTTON '3. Imprimir Ticket-Factura'      SIZE 120,15 ACTION (nOption:=3,RUNEPSON(nOption))
+ @ 4,1 BUTTON '4. Imprimir Documento No Fiscal' SIZE 120,15 ACTION (nOption:=4,RUNEPSON(nOption))
+ @ 5,1 BUTTON '5. Salir'                        SIZE 120,15 ACTION (nOption:=5,oDlg:End())
+*/
+
+ ACTIVATE DIALOG oDlg CENTERED
+
+RETURN
+
+FUNCTION RUNEPSON(nOption)
+ LOCAL err
+
+ DO CASE
+
+/*  se desactivo se sustituyo mielecc por mielecc
+	CASE mielecc = 1
+
+? "1"
+         err = CierreZ()
+
+	CASE mielecc = 2
+? "2"
+         err = ImprimirTicket()
+*/
+
+
+     CASE nOption = 1
+         err = CierreZ()
+
+	CASE nOption = 2
+         err = ImprimirFactura()
+
+	CASE nOption = 3
+         err = ImprimirNoFiscal()
+
+     CASE nOption = 0
+         EXIT
+
+ ENDCASE  
+
+ ReportarError()
+
+RETURN .T.
+
+Function ImprimirNoFiscal()
+
+//? "ImprimirNoFiscal"
+
+ err = IF_WRITE("@OpenNonfiscalReceipt")
+ err = IF_WRITE("@PrintNonfiscalText|TEXTO NO FISCAL")
+ err = IF_WRITE("@CloseNonfiscalReceipt")
+
+ IF err <> 0
+    ReportarError()
+ ELSE
+    ** Recuperar el numero de ticket de la respuesta fiscal 
+    nfactura = VAL( IF_READ(3)) 
+    return nfactura
+ ENDIF
+
+return err
+
+** Function Cancelar Ticket
+
+Function CancelTicket()
+
+   err = IF_WRITE("@SINCRO")
+
+return err
+
+/* se desactivo esta dmas porqeuya existe impresion de factura  Function ImprimirFactura()
+Function ImprimirTicket()
+
+//? "ImprimirTicket"
+
+  err = IF_WRITE("@OpenFiscalReceipt")
+
+  err = IF_WRITE("@PrintFiscaltext|Texto fiscal")
+
+  * item 1:  tasa 9%, y precio neto  $2.5
+
+  err = IF_WRITE("@PrintLineItem|Manzanas|1|2.5|0.12|M")
+
+  **   HAGO UN PAGO POR $10
+  err = IF_WRITE("@ReturnRecharge|PAGO|10.0|T")
+
+  **  PIDO EL SUBTOTAL Y CIERRO EL TICKET
+
+  err = IF_WRITE("@Subtotal")
+
+  err = IF_WRITE("@CloseFiscalReceipt")
+
+   ** si hay error cancelar el ticket
+   IF err <> 0
+    ReportarError()
+   ELSE
+    ** Recuperar el numero de ticket de la respuesta fiscal 
+    nfactura = VAL( IF_READ(3)) 
+    return nfactura
+   ENDIF
+return err
+*/
+
+Function ImprimirFactura()
+   
+//? "ImprimirFactura"
+
+   err = IF_WRITE("@OpenFiscalReceipt|INCEPAR LTDA|J123456789")
+  
+
+   * item 1:  tasa 12%, y precio neto $1.00
+   err = IF_WRITE("@PrintLineItem|ARTICULO 1|1|1.00|0.12|M")
+
+
+// se Inhabilito para que imprima un solo producto a 1 bsf para que no se registre altos
+// montos en la impresora fiscal   
+
+   *  item 2: tasa 21% ) y precio neto $12.50
+   err = IF_WRITE("@PrintLineItem|ARTICULO 2|2|1.00|0.08|M")
+
+   **   HAGO UN PAGO POR $100
+   err = IF_WRITE("@ReturnRecharge|PAGO|100.0|T")
+
+   **  PIDO EL SUBTOTAL Y CIERRO LA FACTURA
+
+   err = IF_WRITE("@Subtotal")
+
+   err = IF_WRITE("@CloseFiscalReceipt")
+   
+   ** si hay error cancelar la factura
+   IF err <> 0
+    ReportarError()
+   ELSE
+    nfactura = VAL( IF_READ(3))
+    return nfactura
+   ENDIF
+  
+return err
+
+
+** Function Imprimir CierreZ
+
+Function CierreZ()
+
+//? "CierreZ   en report"
+
+   err = IF_WRITE("@DailyClose|Z")
+
+return err
+
+** Function Enviar un commando cualquiera
+
+Function Enviar(string)
+
+// Parameters string
+ err = IF_WRITE(string)
+
+return err
+
+** Funciones de manejo de errores
+
+PROCE ReportarError()
+
+ LOCAL nI := 0
+ LOCAL cMsg := ""
+
+ LOCAL aPRNStat:=ARRAY(16)
+ LOCAL aFISStat:=ARRAY(16)
+
+ aPRNStat[01] = "Bit  1 " + "Impresora Ocupada"
+ aPRNStat[02] = "Bit  2 " + "Impresora Seleccionada"
+ aPRNStat[03] = "Bit  3 " + "Error en la Impresora"
+ aPRNStat[04] = "Bit  4 " + "Impresora Fuera de L¡nea"
+ aPRNStat[05] = "Bit  5 " + "Poco papel auditor¡a"
+ aPRNStat[06] = "Bit  6 " + "Poco papel"
+ aPRNStat[07] = "Bit  7 " + "Buffer impresora lleno"
+ aPRNStat[08] = "Bit  8 " + "Buffer impresora vacio"
+ aPRNStat[09] = "Bit  9 " + "Sin uso"
+ aPRNStat[10] = "Bit 10 " + "Sin uso"
+ aPRNStat[11] = "Bit 11 " + "Sin uso"
+ aPRNStat[12] = "Bit 12 " + "Sin uso"
+ aPRNStat[13] = "Bit 13 " + "Caj¢n de Dinero Abierto"
+ aPRNStat[14] = "Bit 14 " + "Sin uso"
+ aPRNStat[15] = "Bit 15 " + "Impresora sin Papel"
+ aPRNStat[16] = "Bit 16 " + "Bits 0-6 Activados"
+
+ **  Estados FISCALES (EPSON!!!)
+
+ aFISStat[01] =  "Bit  1 " + "Checkeo de Memoria Fiscal !MAL!"
+ aFISStat[02] =  "Bit  2 " + "Checkeo RAM de Trabajo !MAL!"
+ aFISStat[03] =  "Bit  3 " + "Bater¡a BAJA "
+ aFISStat[04] =  "Bit  4 " + "Comando NO Reconocido "
+ aFISStat[05] =  "Bit  5 " + "Campo de Datos INVALIDO "
+ aFISStat[06] =  "Bit  6 " + "Comando Inv lido para el Estado L¢gico del Equipo"
+ aFISStat[07] =  "Bit  7 " + "Se va a producir el OVERFLOW en los Acumuladores del equipo"
+ aFISStat[08] =  "Bit  8 " + "La memoria Fiscal esta LLENA "
+ aFISStat[09] =  "Bit  9 " + "La memoria fiscal se esta por LLENAR"
+ aFISStat[10] =  "Bit 10 " + "El Impresor tiene N£mero de Serie(Certificado)"
+ aFISStat[11] =  "Bit 11 " + "El controlador Fiscal esta Fiscalizado"
+ aFISStat[12] =  "Bit 12 " + "Se llego al M ximo de Items o se requiere un cierre del d¡a"
+ aFISStat[13] =  "Bit 13 " + "Documento Fiscal Abierto"
+ aFISStat[14] =  "Bit 14 " + "Documento Abierto "
+ aFISStat[15] =  "Bit 15 " + "Factura abierta, Hoja Suelta"
+ aFISStat[16] =  "Bit 16 " + "OR de bits 0-8 da 1 "
+
+ ? "Estado de la impresora:" + CHR(13) + CHR(10)
+
+//? nI,"nI"
+
+ FOR nI = 1 TO 16
+    IF IF_ERROR1(nI) > 0
+      cMsg = cMsg + aPRNStat[nI] + CHR(13)+CHR(10)
+    ENDIF
+ NEXT
+
+// ? cMsg
+
+ cMsg = ""
+
+ ? "Estado del controlador fiscal:"  + CHR(13) + CHR(10)
+
+ FOR nI = 1 TO 16
+    IF IF_ERROR2(nI) > 0
+      cMsg = cMsg + aFISStat[nI] + CHR(13)+CHR(10)
+    ENDIF
+ NEXT
+
+ ? cMsg
+
+ MsgAlert("Presion Enter")
+
+RETURN
+
+

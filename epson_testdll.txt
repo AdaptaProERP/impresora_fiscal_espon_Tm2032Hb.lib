@@ -1,0 +1,50 @@
+// Programa   : EPSON_TESTDLL
+// Fecha/Hora : 30/06/2020 23:33:26
+// Propósito  :
+// Creado Por :
+// Llamado por:
+// Aplicación :
+// Tabla      :
+
+#INCLUDE "DPXBASE.CH"
+
+PROCE MAIN()
+ LOCAL nPort,nErr
+
+ DEFAULT oDp:cImpFisCom:="COM1"
+
+// nPort:=IF_OPEN(oDp:cImpFisCom,9600)
+
+ IF nPort=0
+
+ ENDIF
+
+IF_SERIAL("27-0163848-435")
+
+nPort:= IF_OPEN(oDp:cImpFisCom,9600)
+
+
+err:= IF_WRITE("@FACTABRE|F|C|A|1|F|17|I|I|FERNANDO|V.MANUEL 822|CUIT|30532847547|B|CAP FED|BSAS|CONTADO|||C")
+
+err:= IF_WRITE("@FACTITEM|Hon. Judiciales|33.058|1.00|0.2100|R|1|0.00000000||||0.0|0.0")
+
+err:= IF_WRITE("@FACTPAGO|Efectivo -$-|284.08|T")
+
+err:= IF_WRITE("@FACTCIERRA|F|A|")
+
+ 
+
+? IF_ERROR1(0),"IF_ERROR1(0)" 
+// imprime el código de estado del impresor fiscal
+
+? IF_ERROR2(0),"IF_ERROR2(0)"
+// imprime el código de estado de la controladora fiscal
+
+? IF_READ(3),"IF_READ(3)"
+// recupera el campo nro 3 de la respuesta fiscal
+
+ nErr:=IF_CLOSE()
+
+? nPort,nErr
+
+RETURN
